@@ -38,6 +38,16 @@ describe("isLanguageSupported", () => {
     expect(isLanguageSupported("Makefile")).toBe(false);
   });
 
+  it("supports Ruby and ERB files, including Ruby files known by name", () => {
+    expect(isLanguageSupported("app/models/user.rb")).toBe(true);
+    expect(isLanguageSupported("lib/tasks/db.rake")).toBe(true);
+    expect(isLanguageSupported("paseo.gemspec")).toBe(true);
+    expect(isLanguageSupported("app/views/users/show.html.erb")).toBe(true);
+    expect(isLanguageSupported("Gemfile")).toBe(true);
+    expect(isLanguageSupported("/repo/Rakefile")).toBe(true);
+    expect(isLanguageSupported("Gemfile.lock")).toBe(false);
+  });
+
   it("handles nested paths", () => {
     expect(isLanguageSupported("src/utils/test.ts")).toBe(true);
     expect(isLanguageSupported("deep/nested/path/file.py")).toBe(true);
