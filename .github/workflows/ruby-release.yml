@@ -41,6 +41,7 @@ jobs:
     needs: check
     if: needs.check.outputs.publish == 'true'
     runs-on: macos-15
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -49,17 +50,14 @@ jobs:
           cache: npm
 
       - run: npm ci --no-audit --no-fund
-      - run: npm run build:app-deps:clean
-      - run: npx expo export --platform web
-        working-directory: packages/app
-        env:
-          PASEO_WEB_PLATFORM: electron
 
       - name: Build and sign the app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          # Same as upstream's release workflow: the web bundle runs out of memory without it.
+          NODE_OPTIONS: --max-old-space-size=4096
         run: |
-          npm run build --workspace=@getpaseo/desktop -- --mac dir --arm64 \
+          npm run build:desktop -- --mac dir --arm64 \
             -c.mac.notarize=false -c.mac.identity=null -c.publish=null \
             -c.extraMetadata.paseoRubyRelease=${{ needs.check.outputs.tag }}
           codesign --force --deep --sign - packages/desktop/release/mac-arm64/Paseo.app
