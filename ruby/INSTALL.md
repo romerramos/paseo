@@ -16,7 +16,7 @@ sed -e "s|HOME_DIR|$HOME|g" -e "s|PATH_VALUE|$PATH|g" \
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/paseo-ruby.update.plist
 ```
 
-The first build starts immediately and takes about 10 minutes. Follow it with `tail -f ~/.paseo-ruby/update.log`, and wait for `Paseo update ready` or `Paseo updated`.
+The first build starts immediately and takes a few minutes. Follow it with `tail -f ~/.paseo-ruby/update.log`, and wait for `Paseo update ready` or `Paseo updated`.
 
 Then ask the user to quit Paseo, and run `launchctl kickstart gui/$(id -u)/paseo-ruby.update` to install the new app right away. The official app is kept in `~/.paseo-ruby/official/`. Settings, paired devices and agents are kept as they are.
 
