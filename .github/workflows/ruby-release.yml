@@ -1,0 +1,61 @@
+# Ruby fork: builds the macOS app from main and publishes it as a release, which the app's
+# updater installs. This is the only workflow in the fork; upstream's are removed.
+name: Ruby release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ruby-release
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Name the release
+        id: release
+        run: |
+          git fetch -q --tags https://github.com/getpaseo/paseo.git
+          base="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "tag=${base#v}-ruby.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build:app-deps:clean
+      - run: npx expo export --platform web
+        working-directory: packages/app
+        env:
+          PASEO_WEB_PLATFORM: electron
+
+      - name: Build and sign the app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm run build --workspace=@getpaseo/desktop -- --mac dir --arm64 \
+            -c.mac.notarize=false -c.mac.identity=null -c.publish=null \
+            -c.extraMetadata.paseoRubyRelease=${{ steps.release.outputs.tag }}
+          codesign --force --deep --sign - packages/desktop/release/mac-arm64/Paseo.app
+          ditto -c -k --keepParent packages/desktop/release/mac-arm64/Paseo.app Paseo-mac-arm64.zip
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.release.outputs.tag }}" Paseo-mac-arm64.zip \
+            --target "$GITHUB_SHA" --title "${{ steps.release.outputs.tag }}" \
+            --notes "Paseo ${{ steps.release.outputs.base }} with Ruby and ERB syntax highlighting."
