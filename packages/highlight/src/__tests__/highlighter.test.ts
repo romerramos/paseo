@@ -33,6 +33,29 @@ describe("highlightCode", () => {
     expect(stringToken?.style).toBe("string");
   });
 
+  it("highlights Ruby code", () => {
+    const code = 'class Greeter\n  def hello = "world" # greet\nend';
+    const result = highlightCode(code, "greeter.rb");
+
+    expect(result[0].find((t) => t.text === "class")?.style).toBe("keyword");
+    expect(result[1].find((t) => t.text === "def")?.style).toBe("keyword");
+    expect(result[1].find((t) => t.text.includes("world"))?.style).toBe("string");
+    expect(result[1].find((t) => t.text.includes("greet"))?.style).toBe("comment");
+  });
+
+  it("highlights ERB as HTML with embedded Ruby", () => {
+    const code = '<li class="item"><%= link_to "Home", root_path if admin? -%></li>\n<%# note %>';
+    const [line, comment] = highlightCode(code, "show.html.erb");
+
+    expect(line.find((t) => t.text === "li")?.style).toBe("tag");
+    expect(line.find((t) => t.text === "class")?.style).toBe("attribute");
+    expect(line.find((t) => t.text === "<%=")?.style).toBe("meta");
+    expect(line.find((t) => t.text === "if")?.style).toBe("keyword");
+    expect(line.find((t) => t.text.includes("Home"))?.style).toBe("string");
+    expect(line.find((t) => t.text === "-%>")?.style).toBe("meta");
+    expect(comment.find((t) => t.text.includes("note"))?.style).toBe("comment");
+  });
+
   it("highlights Swift code", () => {
     const code = 'struct Greeter {\n    let message = "hello"\n}';
     const result = highlightCode(code, "test.swift");

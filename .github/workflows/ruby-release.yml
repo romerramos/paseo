@@ -1,0 +1,74 @@
+# Ruby fork: publishes a macOS release, which the app's updater installs, each time main takes in
+# a new stable Paseo release. A manual run always publishes. Upstream workflows are removed.
+name: Ruby release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ruby-release
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      base: ${{ steps.release.outputs.base }}
+      tag: ${{ steps.release.outputs.tag }}
+      publish: ${{ steps.release.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch -q --tags https://github.com/getpaseo/paseo.git
+          base="$(git tag --merged HEAD --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "tag=${base#v}-ruby.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          published="$(gh release list --limit 100 --json tagName --jq '.[].tagName' | grep -c "^${base#v}-ruby\." || true)"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] || [ "$published" = 0 ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    needs: check
+    if: needs.check.outputs.publish == 'true'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build:app-deps:clean
+      - run: npx expo export --platform web
+        working-directory: packages/app
+        env:
+          PASEO_WEB_PLATFORM: electron
+
+      - name: Build and sign the app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm run build --workspace=@getpaseo/desktop -- --mac dir --arm64 \
+            -c.mac.notarize=false -c.mac.identity=null -c.publish=null \
+            -c.extraMetadata.paseoRubyRelease=${{ needs.check.outputs.tag }}
+          codesign --force --deep --sign - packages/desktop/release/mac-arm64/Paseo.app
+          ditto -c -k --keepParent packages/desktop/release/mac-arm64/Paseo.app Paseo-mac-arm64.zip
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ needs.check.outputs.tag }}" Paseo-mac-arm64.zip \
+            --target "$GITHUB_SHA" --title "${{ needs.check.outputs.tag }}" \
+            --notes "Paseo ${{ needs.check.outputs.base }} with Ruby and ERB syntax highlighting."

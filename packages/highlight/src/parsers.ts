@@ -1,5 +1,6 @@
 import { defineLanguageFacet, Language, StreamLanguage } from "@codemirror/language";
 import { dart } from "@codemirror/legacy-modes/mode/clike";
+import { ruby } from "@codemirror/legacy-modes/mode/ruby";
 import { swift } from "@codemirror/legacy-modes/mode/swift";
 import { parser as jsParser } from "@lezer/javascript";
 import { parser as jsonParser } from "@lezer/json";
@@ -20,12 +21,15 @@ import { csharpLanguage } from "./csharp/language.js";
 import { astroParser } from "./astro/parser.js";
 import { vueParser } from "./vue/parser.js";
 import { nixLanguage } from "./nix/language.js";
+import { erbLanguage } from "./erb/language.js";
 import { parser as svelteBaseParser } from "./svelte/parser.js";
 import { configureNesting, defaultNesting } from "./svelte/nesting.js";
 
 function language(parser: Parser): Language {
   return new Language(defineLanguageFacet(), parser);
 }
+
+const rubyLanguage = StreamLanguage.define(ruby);
 
 const languagesByExtension: Record<string, Language> = {
   // JavaScript/TypeScript
@@ -88,9 +92,43 @@ const languagesByExtension: Record<string, Language> = {
   // Markdown
   md: language(markdownParser),
   mdx: language(markdownParser),
+  // Ruby
+  rb: rubyLanguage,
+  rake: rubyLanguage,
+  gemspec: rubyLanguage,
+  podspec: rubyLanguage,
+  ru: rubyLanguage,
+  rbi: rubyLanguage,
+  thor: rubyLanguage,
+  jbuilder: rubyLanguage,
+  builder: rubyLanguage,
+  // ERB: html.erb, text.erb, js.erb, ...
+  erb: erbLanguage,
+  rhtml: erbLanguage,
+};
+
+/** Files whose language comes from their exact basename because they have no extension. */
+const languagesByFilename: Record<string, Language> = {
+  Gemfile: rubyLanguage,
+  Rakefile: rubyLanguage,
+  Guardfile: rubyLanguage,
+  Capfile: rubyLanguage,
+  Brewfile: rubyLanguage,
+  Podfile: rubyLanguage,
+  Vagrantfile: rubyLanguage,
+  Berksfile: rubyLanguage,
+  Thorfile: rubyLanguage,
+  Dangerfile: rubyLanguage,
+  Fastfile: rubyLanguage,
+  Appfile: rubyLanguage,
+  ".irbrc": rubyLanguage,
+  ".pryrc": rubyLanguage,
 };
 
 export function getLanguageForFile(filename: string): Language | null {
+  const basename = filename.split(/[\\/]/).pop() ?? filename;
+  const byName = languagesByFilename[basename];
+  if (byName) return byName;
   const ext = filename.split(".").pop()?.toLowerCase();
   if (!ext) return null;
   return languagesByExtension[ext] ?? null;

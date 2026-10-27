@@ -22,6 +22,7 @@ import {
   type AppReleaseChannel,
   type AppUpdateCheckIntent,
 } from "./app-update-rollout.js";
+import { ForkAppUpdateRuntime, installedRelease } from "./fork-updater.js";
 
 export {
   bucketFromStagingUserId,
@@ -223,7 +224,7 @@ class ElectronAppUpdateRuntime implements AppUpdateRuntime {
 }
 
 const appUpdateService = createAppUpdateService({
-  runtime: new ElectronAppUpdateRuntime(),
+  runtime: installedRelease() ? new ForkAppUpdateRuntime() : new ElectronAppUpdateRuntime(),
   isPackaged: () => app.isPackaged,
   now: () => Date.now(),
   bucket: async () => bucketFromStagingUserId(await getStagingUserId()),
