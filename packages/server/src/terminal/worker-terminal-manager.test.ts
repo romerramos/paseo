@@ -16,7 +16,9 @@ import { afterEach, expect, it } from "vitest";
 import { isPlatform } from "../test-utils/platform.js";
 import { EventEmitter } from "node:events";
 import {
+  closeSync,
   existsSync,
+  openSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -58,6 +60,7 @@ import {
   listTerminalWorkerRecords,
   readTerminalWorkerRecord,
   terminalWorkerDirectory,
+  terminalWorkerRecordPath,
   type TerminalWorkerRecord,
 } from "./terminal-worker-record.js";
 import { TERMINAL_WORKER_PROTOCOL_OVERRIDE_ENV } from "./terminal-worker-protocol.js";
@@ -807,52 +810,81 @@ async function recordedTerminalPids(paseoHome: string): Promise<Map<string, numb
   return pids;
 }
 
-it("never adopts a live worker's terminals after a kill cleanup it could not finish, even once the worker rewrites its record", async () => {
-  const paseoHome = createTemporaryHome();
-  const cwd = mkdtempSync(join(tmpdir(), "worker-terminal-manager-unfinished-kill-"));
-  temporaryDirs.push(cwd);
-  const first = await startRealWorkerManager({ paseoHome });
-  manager = first;
-  const ending = await first.createTerminal({
-    workspaceId: "ws-unfinished-kill",
-    cwd,
-    ...nodeTerminalCommand("setInterval(() => {}, 1000);"),
-  });
-  const remaining = await first.createTerminal({
-    workspaceId: "ws-unfinished-kill",
-    cwd,
-    ...nodeTerminalCommand("setInterval(() => {}, 1000);"),
-  });
-  const pids = await recordedTerminalPids(paseoHome);
-  const endingPid = pids.get(ending.id)!;
-  const remainingPid = pids.get(remaining.id)!;
+it.each([false, true])(
+  "never adopts a live worker's terminals after a kill cleanup it could not finish, even once the worker rewrites its record (held reader: %s)",
+  async (holdReader) => {
+    const paseoHome = createTemporaryHome();
+    const cwd = mkdtempSync(join(tmpdir(), "worker-terminal-manager-unfinished-kill-"));
+    temporaryDirs.push(cwd);
+    const first = await startRealWorkerManager({ paseoHome });
+    manager = first;
+    const exitRequestPath = join(cwd, "exit-requested");
+    const exitObservedPath = join(cwd, "exit-observed");
+    const ending = await first.createTerminal({
+      workspaceId: "ws-unfinished-kill",
+      cwd,
+      ...nodeTerminalCommand(`
+      const { existsSync, writeFileSync } = require("node:fs");
+      setInterval(() => {
+        if (existsSync(${JSON.stringify(exitRequestPath)})) {
+          writeFileSync(${JSON.stringify(exitObservedPath)}, "");
+          process.exit(0);
+        }
+      }, 25);
+    `),
+    });
+    const remaining = await first.createTerminal({
+      workspaceId: "ws-unfinished-kill",
+      cwd,
+      ...nodeTerminalCommand("setInterval(() => {}, 1000);"),
+    });
+    const pids = await recordedTerminalPids(paseoHome);
+    const endingPid = pids.get(ending.id)!;
+    const remainingPid = pids.get(remaining.id)!;
+    const [record] = await workerRecords(paseoHome);
 
-  // A kill cleanup whose process table read fails signals nothing and leaves the worker live.
-  const inspector = createTerminalWorkerProcessInspector();
-  await expect(
-    reapTerminalWorkers({
-      paseoHome,
-      inspector: { ...inspector, listProcesses: () => Promise.reject(new Error("ps timed out")) },
-    }),
-  ).rejects.toBeInstanceOf(TerminalCleanupNotConfirmedError);
-  await first.detach();
-  expect((await readUnconfirmedTerminalCleanup(paseoHome)).length).toBeGreaterThan(0);
+    // A kill cleanup whose process table read fails signals nothing and leaves the worker live.
+    const inspector = createTerminalWorkerProcessInspector();
+    await expect(
+      reapTerminalWorkers({
+        paseoHome,
+        inspector: {
+          ...inspector,
+          listProcesses: () => Promise.reject(new Error("ps timed out")),
+        },
+      }),
+    ).rejects.toBeInstanceOf(TerminalCleanupNotConfirmedError);
+    expect((await readUnconfirmedTerminalCleanup(paseoHome)).length).toBeGreaterThan(0);
 
-  // One terminal ends on its own: the live worker rewrites its record from memory.
-  process.kill(endingPid, "SIGKILL");
-  await waitForCondition(
-    async () => !(await recordedTerminalPids(paseoHome)).has(ending.id),
-    10000,
-  );
-  expect((await readUnconfirmedTerminalCleanup(paseoHome)).length).toBeGreaterThan(0);
+    // Keep an ordinary reader open until the worker delivers the terminal exit.
+    // Windows cannot replace the record while this handle is open. The exit must
+    // still reach the controller, and publication must recover after release.
+    const recordFd = holdReader
+      ? openSync(terminalWorkerRecordPath(paseoHome, record!.pid), "r")
+      : null;
+    try {
+      writeFileSync(exitRequestPath, "");
+      await waitForCondition(() => first.getTerminal(ending.id) === undefined, 10000);
+      expect(existsSync(exitObservedPath)).toBe(true);
+      expect(isProcessAlive(endingPid)).toBe(false);
+    } finally {
+      if (recordFd !== null) closeSync(recordFd);
+    }
+    await waitForCondition(
+      async () => !(await recordedTerminalPids(paseoHome)).has(ending.id),
+      10000,
+    );
+    expect((await readUnconfirmedTerminalCleanup(paseoHome)).length).toBeGreaterThan(0);
 
-  manager = await startRealWorkerManager({ paseoHome });
+    await first.detach();
+    manager = await startRealWorkerManager({ paseoHome });
 
-  expect(manager.getTerminal(remaining.id)).toBeUndefined();
-  expect(await manager.getTerminals(cwd)).toEqual([]);
-  await waitForCondition(() => !isProcessAlive(remainingPid), 10000);
-  expect(await readUnconfirmedTerminalCleanup(paseoHome)).toEqual([]);
-});
+    expect(manager.getTerminal(remaining.id)).toBeUndefined();
+    expect(await manager.getTerminals(cwd)).toEqual([]);
+    await waitForCondition(() => !isProcessAlive(remainingPid), 10000);
+    expect(await readUnconfirmedTerminalCleanup(paseoHome)).toEqual([]);
+  },
+);
 
 // The worker's own `ps`, delayed: a program that exits while the worker reads its birth time
 // lands its exit in the middle of creation. Only the worker launched while this PATH is set sees
@@ -1710,6 +1742,7 @@ it.skipIf(isPlatform("win32"))(
 
 it("replays bounded ANSI chunks independently of live output and reconstructs the revision cut", async () => {
   const cwd = createTemporaryHome();
+  const finishBefore = join(cwd, "finish-before");
   manager = await startRealWorkerManager();
   const session = trackTerminal(
     await manager.createTerminal({
@@ -1719,7 +1752,15 @@ it("replays bounded ANSI chunks independently of live output and reconstructs th
       cols: 120,
       ...nodeTerminalCommand(`
       for (let i = 0; i < 800; i++) process.stdout.write("\\x1b[31m" + String(i).padStart(4, "0") + ":" + "x".repeat(100) + "\\x1b[0m\\r\\n");
-      require("node:readline").createInterface({ input: process.stdin }).on("line", line => process.stdout.write(line === "before" ? "PRE-CUT\\r\\n" : "LIVE-AFTER-REPLAY\\r\\n"));
+      require("node:readline").createInterface({ input: process.stdin }).on("line", line => {
+        if (line !== "before") { process.stdout.write("LIVE-AFTER-REPLAY\\r\\n"); return; }
+        process.stdout.write("PRE-CUT");
+        const finish = setInterval(() => {
+          if (!require("node:fs").existsSync(${JSON.stringify(finishBefore)})) return;
+          clearInterval(finish);
+          process.stdout.write("\\r\\n");
+        }, 5);
+      });
       setInterval(() => {}, 1000);
     `),
     }),
@@ -1743,6 +1784,13 @@ it("replays bounded ANSI chunks independently of live output and reconstructs th
   });
   session.send({ type: "input", data: "before\r" });
   await waitForCondition(() => live.includes("PRE-CUT"), 10000);
+  // A PTY may deliver the marker and its trailing newline separately. Finish
+  // that output before replay, so the two captures must describe the same cut.
+  writeFileSync(finishBefore, "");
+  await waitForCondition(async () => {
+    const { lines } = await manager!.captureTerminal(session.id);
+    return lines.at(-2) === "PRE-CUT" && lines.at(-1) === "";
+  }, 10000);
   const expected = await manager.captureTerminal(session.id);
   const metadata = await manager.replayTerminal(session.id, undefined, (event) => {
     events.push(event.type);

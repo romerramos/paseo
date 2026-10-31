@@ -18,6 +18,7 @@ import {
   writeTerminalWorkerRecord,
   type TerminalWorkerRecord,
 } from "./terminal-worker-record.js";
+import { createTerminalWorkerRecordPublisher } from "./terminal-worker-record-publisher.js";
 import { resolveTerminalWorkerSocketPath } from "./terminal-worker-socket-path.js";
 import {
   TERMINAL_WORKER_PROTOCOL_OVERRIDE_ENV,
@@ -214,13 +215,17 @@ function runWorker(argv: string[]): void {
     replayController.send(message);
   }
 
-  function persistRecord(): void {
+  const recordPublisher = createTerminalWorkerRecordPublisher((state) => {
+    writeTerminalWorkerRecord(args.paseoHome, state);
+  });
+
+  async function persistRecord(): Promise<void> {
     if (!record || exiting) return;
     record = {
       ...record,
       terminals: record.terminals.filter((entry) => sessionsById.has(entry.id)),
     };
-    writeTerminalWorkerRecord(args.paseoHome, record);
+    await recordPublisher.publish(record);
   }
 
   function removeOwnFiles(): void {
@@ -233,6 +238,7 @@ function runWorker(argv: string[]): void {
   function exitWorker(code: number): void {
     if (exiting) return;
     exiting = true;
+    recordPublisher.stop();
     removeOwnFiles();
     server?.close();
     process.exit(code);
@@ -349,7 +355,9 @@ function runWorker(argv: string[]): void {
       outputCoalescer.flush();
       clearTerminalSubscriptions(session.id);
       sessionsById.delete(session.id);
-      persistRecord();
+      void persistRecord().catch((error) => {
+        if (!exiting) console.error("Cannot publish terminal exit:", error);
+      });
       if (exitsHeldDuringCreation.has(session.id)) {
         exitsHeldDuringCreation.set(session.id, info);
         return;
@@ -424,7 +432,7 @@ function runWorker(argv: string[]): void {
         { id: session.id, pid, startedAt: inspection.snapshot.startedAt },
       ],
     };
-    persistRecord();
+    await persistRecord();
   }
 
   function enqueueCreateTerminalRequest(message: TerminalCreateRequest): Promise<void> {
