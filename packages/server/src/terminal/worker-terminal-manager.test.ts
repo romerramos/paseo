@@ -50,6 +50,7 @@ import type {
   WorkerTerminalState,
   TerminalWorkerToParentMessage,
 } from "./terminal-worker-protocol.js";
+import { classifyTerminalProgramProcess } from "./terminal-worker-ownership.js";
 import { createTerminalWorkerProcessInspector } from "./terminal-worker-processes.js";
 import {
   readUnconfirmedTerminalCleanup,
@@ -881,8 +882,19 @@ it.each([false, true])(
 
     expect(manager.getTerminal(remaining.id)).toBeUndefined();
     expect(await manager.getTerminals(cwd)).toEqual([]);
-    await waitForCondition(() => !isProcessAlive(remainingPid), 10000);
     expect(await readUnconfirmedTerminalCleanup(paseoHome)).toEqual([]);
+    const original = record!.terminals.find((entry) => entry.id === remaining.id)!;
+    // Startup can launch a new worker after cleanup and Windows can reuse the old PID.
+    // Require the original process to be gone, not the numeric PID to remain unused.
+    await expect
+      .poll(
+        async () =>
+          !isProcessAlive(remainingPid) ||
+          classifyTerminalProgramProcess(original, await inspector.inspect(remainingPid)).status ===
+            "unrelated",
+        { timeout: 10000 },
+      )
+      .toBe(true);
   },
 );
 
