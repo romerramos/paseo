@@ -1236,6 +1236,7 @@ export const ar: TranslationResources = {
       hosts: "المضيفون",
       settings: "إعدادات",
       closeSidebar: "إغلاق الشريط الجانبي",
+      moreActions: "المزيد من الإجراءات",
     },
     footer: {
       usage: "الاستخدام",
@@ -1340,6 +1341,9 @@ export const ar: TranslationResources = {
         hostDisconnected: "Host غير متصل",
         hideFailed: "فشل في إخفاء مساحة العمل",
         archiveFailed: "فشل في أرشفة مساحة العمل",
+        archived: "تمت أرشفة مساحة العمل",
+        undoArchive: "تراجع",
+        undoArchiveFailed: "تعذّر التراجع عن الأرشفة",
       },
     },
   },

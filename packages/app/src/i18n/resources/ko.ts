@@ -1243,6 +1243,7 @@ export const ko: TranslationResources = {
       hosts: "호스트",
       settings: "설정",
       closeSidebar: "사이드바 닫기",
+      moreActions: "추가 작업",
     },
     footer: {
       usage: "사용량",
@@ -1347,6 +1348,9 @@ export const ko: TranslationResources = {
         hostDisconnected: "호스트가 연결되어 있지 않습니다",
         hideFailed: "워크스페이스를 숨기지 못했습니다",
         archiveFailed: "워크스페이스를 보관하지 못했습니다.",
+        archived: "워크스페이스를 보관했습니다",
+        undoArchive: "실행 취소",
+        undoArchiveFailed: "보관을 취소하지 못했습니다",
       },
     },
   },
