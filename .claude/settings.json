@@ -24,7 +24,20 @@
       "Bash(npm run build:server)",
       "Bash(npm run typecheck)",
       "Bash(npx vitest run src/__tests__/parsers.test.ts:*)",
-      "Bash(npx vitest run src/features/fork-updater.test.ts:*)"
+      "Bash(npx vitest run src/features/fork-updater.test.ts:*)",
+      "Bash(git remote:*)",
+      "Bash(git config:*)",
+      "Bash(git tag:*)",
+      "Bash(git merge --abort)",
+      "Bash(npm run build:client)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run format:*)",
+      "Bash(npx vitest run:*)",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep"
     ]
   }
 }
