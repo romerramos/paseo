@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git config user.name:*)",
+      "Bash(git config user.email:*)",
+      "Bash(git remote add upstream:*)",
+      "Bash(git remote get-url:*)",
+      "Bash(git merge:*)",
+      "Bash(git merge-base:*)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git log:*)",
+      "Bash(git tag -l:*)",
+      "Bash(git push origin main)",
+      "Bash(npm ci:*)",
+      "Bash(npm install --package-lock-only:*)",
+      "Bash(npm run build:app-deps:clean)",
+      "Bash(npm run build:server)",
+      "Bash(npm run typecheck)",
+      "Bash(npx vitest run src/__tests__/parsers.test.ts:*)",
+      "Bash(npx vitest run src/features/fork-updater.test.ts:*)"
+    ]
+  }
+}
