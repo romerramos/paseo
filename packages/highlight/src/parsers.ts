@@ -22,6 +22,7 @@ import { astroParser } from "./astro/parser.js";
 import { vueParser } from "./vue/parser.js";
 import { nixLanguage } from "./nix/language.js";
 import { erbLanguage } from "./erb/language.js";
+import { hclLanguage } from "./hcl/language.js";
 import { parser as svelteBaseParser } from "./svelte/parser.js";
 import { configureNesting, defaultNesting } from "./svelte/nesting.js";
 
@@ -86,6 +87,10 @@ const languagesByExtension: Record<string, Language> = {
   cs: csharpLanguage,
   // Nix
   nix: nixLanguage,
+  // Terraform / HCL
+  tf: hclLanguage,
+  tfvars: hclLanguage,
+  hcl: hclLanguage,
   // Elixir
   ex: language(elixirParser),
   exs: language(elixirParser),
