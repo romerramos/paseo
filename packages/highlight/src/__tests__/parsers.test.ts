@@ -39,6 +39,8 @@ describe("isLanguageSupported", () => {
 
   it("returns false for files without extensions", () => {
     expect(isLanguageSupported("Makefile")).toBe(false);
+    expect(isLanguageSupported("src/ts")).toBe(false);
+    expect(isLanguageSupported("bin/bash")).toBe(false);
   });
 
   it("supports Ruby and ERB files, including Ruby files known by name", () => {
