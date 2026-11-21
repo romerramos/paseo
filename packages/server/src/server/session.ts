@@ -1722,6 +1722,14 @@ export class Session {
   ): Promise<void> {
     try {
       await this.syncWorkspaceGitObserverForWorkspace(workspace);
+      if (workspace.kind !== "directory" && this.wantsEvent("checkout_status_update")) {
+        // Recovery can refresh Git before this session starts observing again.
+        // Publish the current status to replace any read made while archived.
+        const snapshot = await this.workspaceGitService.getSnapshot(workspace.cwd, {
+          includeForge: false,
+        });
+        this.checkoutSession.emitStatusUpdate(workspace.cwd, snapshot, { force: true });
+      }
       await this.emitWorkspaceUpdateForWorkspaceId(workspace.workspaceId);
     } catch (error) {
       this.sessionLogger.warn(
@@ -4602,6 +4610,7 @@ export class Session {
 
     try {
       await sendPromptToAgent({
+        agentMessages: this.agentMessages,
         agentManager: this.agentManager,
         agentStorage: this.agentStorage,
         agentId,
@@ -9169,6 +9178,7 @@ export class Session {
           return;
         }
         const result = await sendPromptToAgent({
+          agentMessages: this.agentMessages,
           agentManager: this.agentManager,
           agentStorage: this.agentStorage,
           agentId,
