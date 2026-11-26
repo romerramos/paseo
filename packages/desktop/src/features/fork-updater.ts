@@ -8,6 +8,7 @@ import { app } from "electron";
 import { z } from "zod";
 import type {
   AppUpdateInstallRequest,
+  AppUpdateInstallLaunchResult,
   AppUpdateRuntime,
   AppUpdateRuntimeConfiguration,
   RuntimeUpdateCheckResult,
@@ -115,7 +116,7 @@ export class ForkAppUpdateRuntime implements AppUpdateRuntime {
     return download.app;
   }
 
-  quitAndInstall({ isForceRunAfter }: AppUpdateInstallRequest): void {
+  quitAndInstall({ isForceRunAfter }: AppUpdateInstallRequest): AppUpdateInstallLaunchResult {
     if (this.downloadedApp && !this.installing) {
       this.installing = true;
       const bundle = path.resolve(process.execPath, "../../..");
@@ -133,5 +134,6 @@ export class ForkAppUpdateRuntime implements AppUpdateRuntime {
       }).unref();
     }
     app.quit();
+    return { started: true };
   }
 }
